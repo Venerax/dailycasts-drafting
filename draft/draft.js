@@ -1,42 +1,35 @@
-// TODO put this in a separate file?
+// TODO put this somewhere nicer
 function socketFactory($rootScope, namespace) {
-    var socket = io(namespace);
+  var socket = io(namespace);
 
-    return {
-      on: function(eventName, callback) {
-        socket.on(eventName, function() {
-          var args = arguments;
-          $rootScope.$apply(function() {
+  return {
+    on: function(eventName, callback) {
+      socket.on(eventName, function() {
+        var args = arguments;
+        $rootScope.$apply(function() {
+          callback.apply(socket, args);
+        });
+      });
+    },
+    emit: function(eventName, data, callback) {
+      socket.emit(eventName, data, function() {
+        var args = arguments;
+        $rootScope.$apply(function () {
+          if (callback) {
             callback.apply(socket, args);
-          });
+          }
         });
-      },
-      emit: function(eventName, data, callback) {
-        socket.emit(eventName, data, function() {
-          var args = arguments;
-          $rootScope.$apply(function () {
-            if (callback) {
-              callback.apply(socket, args);
-            }
-          });
-        });
-      }
+      });
     }
+  }
 }
 
 angular.module('draftApp', [])
 
 .factory('socket', function ($rootScope) {
-    return new socketFactory($rootScope, '/');
+  // default namespace is '/', which talks to everyone.
+  return new socketFactory($rootScope, '/');
 })
-// in case we want more than one socket...
-// .factory('draftSocket', function($rootScope) {
-//     return new socketFactory($rootScope, '/draft');
-// })
-//
-// .factory('lobbySocket', function($rootScope) {
-//     return new socketFactory($rootScope, '/lobby');
-// })
 
 .factory('draftCardListFactory', function() {
   var cards = [{id:"00005"}, {id:"00006"}, {id:"00007"}];
@@ -55,7 +48,7 @@ angular.module('draftApp', [])
   }
 })
 
-.controller('DraftListController', ['$scope', 'socket', '$attrs', function DraftListController($scope, socket, $attrs) {
+.controller('DraftController', ['socket', '$attrs', function DraftListController(socket, $attrs) {
   var ctrl = this; // so that we can access data in the socket handler's functions
   ctrl.cards = [];
 
@@ -63,7 +56,8 @@ angular.module('draftApp', [])
   socket.emit('lobby:joinroom', $attrs.room);
 
   ctrl.select = function(card, index) {
-    socket.emit('card taken', {card: card, id:index});
+    // relying on ng-repeat index for now. works, but TODO.
+    socket.emit('draft:cardtaken', index);
     card.taken = !card.taken;
   }
 
@@ -76,22 +70,21 @@ angular.module('draftApp', [])
     socket.emit('draft:reset', $attrs.room);
   }
 
-  socket.on('card drawn', function(cards) {
+  socket.on('draft:cardsdrawn', function(cards) {
     // TODO make a function of this?
-    console.log(JSON.stringify(cards));
     ctrl.cards = ctrl.cards.concat(cards);
     // for (var card in cards) {
     //   ctrl.cards.push({id: cards[card]});
     // }
   })
 
-  socket.on('card taken', function(card) {
+  socket.on('draft:cardtaken', function(index) {
     // toggle the card's taken status
-    ctrl.cards[card.id].taken = !ctrl.cards[card.id].taken;
+    ctrl.cards[index].taken = !ctrl.cards[index].taken;
   });
 
   socket.on('draft:refresh', function(cards) {
-    // reinitialise the cards data with the given state - TODO let taken be part of the state too
+    // reinitialise the cards data with the given state
     ctrl.cards = cards;
     // for (var card in cards) {
     //   ctrl.cards.push({id: cards[card]});
@@ -100,13 +93,16 @@ angular.module('draftApp', [])
 
 }])
 
-// TODO separate module?
-.controller('LobbiesController', ['$scope', 'socket', '$window', function LobbiesController($scope, socket, $window) {
+// TODO this should be in a separate module
+.controller('LobbiesController', ['socket', '$window', function LobbiesController(socket, $window) {
+    var ctrl = this;
+    ctrl.rooms = [];
 
-    $scope.rooms = [];
+    // ask for an initial update of the current rooms available
+    socket.emit('lobby:refresh');
 
-    $scope.createDraft = function() {
-      socket.emit('lobby:createroom', {decklistID: stripDecklistID($scope.decklistUrl), cardsPerDeal: $scope.cardsPerDeal});
+    ctrl.createDraft = function() {
+      socket.emit('lobby:createroom', {decklistID: stripDecklistID(ctrl.decklistUrl), cardsPerDeal: ctrl.cardsPerDeal});
       // it would be nice to redirect here, but we we need to wait on the server to furnish us with
       // a room name via the socket. this will therefore result in a redirect event instead.
     }
@@ -120,16 +116,25 @@ angular.module('draftApp', [])
       return url.match(/decklist\/([0-9]*)/)[1];
     }
 
-    socket.on('lobby:roomcreated', function(roomId) {
-      $scope.rooms.push(roomId);
+    socket.on('lobby:refresh', function(rooms) {
+      ctrl.rooms = rooms;
     });
 
+    socket.on('lobby:roomcreated', function(roomId) {
+      ctrl.rooms.push(roomId);
+    });
+
+    // TODO - get rid of this and the $window dependency and just create a link
+    // to a newly created room instead
     socket.on('redirect', function(url) {
       $window.location.href = url;
     });
 }])
 
-.component('draftCardList', {
+// describes an interface allowing the user to interact with the ongoing draft
+// as described in the controller
+.component('draftPanel', {
+  // TODO store this in a separate file
   template:`
   <table class="table table-condensed">
     <tr>
@@ -145,14 +150,23 @@ angular.module('draftApp', [])
     </tr>
     <tr>
       <td>
-        <img ng-data="card" ng-repeat="card in $ctrl.cards" ng-click="$ctrl.select(card, $index)" ng-src="/images/{{card.id}}.png"
+        <img ng-data="card" ng-repeat="card in $ctrl.cards" ng-click="$ctrl.select(card, $index)" ng-src="/images/{{card.code}}.png"
         class="cardimage" ng-class="{'taken': card.taken==true}" id="{{$index}}" alt="{{card.title}}">
       </td>
     </tr>
   </table>
   `,
-  controller: "DraftListController",
+  controller: "DraftController",
+  // TODO - let this component share data with a parent controller, so it can be
+  // used by another component (the up-and-coming draft-card-list).
   bindings: {
     card: "="
   }
+})
+
+// describes an interface that shows the user which cards they have currently drafted
+// (and potentially, what others have selected). room for lots of fancy stuff here;
+// sort by type, exporting features, etc...
+.component('draftCardList', {
+
 })

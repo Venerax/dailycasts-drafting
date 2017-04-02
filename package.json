@@ -17,6 +17,7 @@
     "pug": "^2.0.0-beta5",
     "request": "^2.74.0",
     "serve-favicon": "^2.3.0",
+    "shortid": "2.2.8",
     "socket.io": "^1.4.8",
     "underscore": "^1.8.3",
     "utf-8-validate": "^1.2.1"
