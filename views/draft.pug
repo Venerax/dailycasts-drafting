@@ -1,0 +1,23 @@
+doctype html
+html
+  head
+    title Daily Casts Drafting
+    style.
+      html, body { height: 90%; min-height: 90%; width: 100%; padding: 0px; margin: 0px; box-sizing: border-box; }
+      #header { text-align: left; height: 40px; }
+      #draftpane { box-sizing: border-box; border-right: 0px; }
+      #sidepane { box-sizing: border-box; }
+      img.cardimage { height: 345px; width: 250px; float:left; margin:5px; box-shadow: black 0px 0px 5px; border-radius: 5px; }
+      img.cardimage.taken { opacity: 0.40; }
+    link(rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous")
+  body(ng-app="draftApp" class="container")
+    div(id="header")
+      h1 Draft #{id}
+    div(id="draftpane" class="col-md-8")
+      draft-card-list(room= id)
+    div(id="sidepane" class="col-md-4")
+        ul
+          li(ng-repeat="item in [1,2,3]") {{item}}
+    script(type="text/javascript" src="/angular/angular.js")
+    script(type="text/javascript" src="/socket.io/socket.io.js")
+    script(type="text/javascript" src="/draft/draft.js")

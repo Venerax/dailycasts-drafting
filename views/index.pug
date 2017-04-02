@@ -1,0 +1,25 @@
+doctype html
+html(ng-app="draftApp")
+  head
+    title Daily Casts Drafting
+    link(rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous")
+    // it's either have angular here, or use ng-cloak and redefine the relevant CSS here as well.
+    // we serve it ourselves, so shouldn't be a problem.
+    script(type="text/javascript" src="/angular/angular.js")
+  body
+    div(ng-controller="LobbiesController" class="container")
+      h2 Create a Draft
+      form(ng-submit="createDraft()")
+        div(class="form-group")
+          label(for="decklistUrl") Decklist URL:
+          input(type="text" ng-model="decklistUrl" class="form-control" placeholder="Enter decklist URL")
+        div(class="form-group")
+          label(for="cardsPerDeal") Cards per deal:
+          input(type="text" ng-model="cardsPerDeal" class="form-control" placeholder="Enter number of cards per round")
+        div
+          button(type="submit" class="btn btn-default") Start
+      ul
+        li(ng-repeat="room in rooms") {{room}}
+    script(src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js")
+    script(type="text/javascript" src="/socket.io/socket.io.js")
+    script(type="text/javascript" src="/draft/draft.js")
