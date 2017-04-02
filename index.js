@@ -55,13 +55,13 @@ var DraftState = function(cardData) {
 // set up view engine (using pug)
 app.set('view engine', 'pug')
 
-// set up favicon
-app.use(favicon('images/favicon.ico'));
-
 // define the static directory from which we serve images
 app.use('/images', express.static(__dirname + '/images'));
 app.use('/draft', express.static(__dirname + '/draft'));
 app.use('/angular', express.static(__dirname + '/node_modules/angular'));
+
+// set up favicon
+// app.use(favicon(__dirname + 'images/favicon.ico'));
 
 // routing
 // home page is the lobby

@@ -48,6 +48,10 @@ angular.module('draftApp', [])
   }
 })
 
+// describes the state of the current draft and provides interactivity with it.
+// currently just has an array of Cards, though TODO i am looking at changing this
+// to e.g. add unique IDs so i can use a proper ng-repeat track-by index, among
+// other things.
 .controller('DraftController', ['socket', '$attrs', function DraftListController(socket, $attrs) {
   var ctrl = this; // so that we can access data in the socket handler's functions
   ctrl.cards = [];
@@ -71,11 +75,7 @@ angular.module('draftApp', [])
   }
 
   socket.on('draft:cardsdrawn', function(cards) {
-    // TODO make a function of this?
     ctrl.cards = ctrl.cards.concat(cards);
-    // for (var card in cards) {
-    //   ctrl.cards.push({id: cards[card]});
-    // }
   })
 
   socket.on('draft:cardtaken', function(index) {
@@ -86,9 +86,6 @@ angular.module('draftApp', [])
   socket.on('draft:refresh', function(cards) {
     // reinitialise the cards data with the given state
     ctrl.cards = cards;
-    // for (var card in cards) {
-    //   ctrl.cards.push({id: cards[card]});
-    // }
   });
 
 }])
@@ -105,6 +102,7 @@ angular.module('draftApp', [])
       socket.emit('lobby:createroom', {decklistID: stripDecklistID(ctrl.decklistUrl), cardsPerDeal: ctrl.cardsPerDeal});
       // it would be nice to redirect here, but we we need to wait on the server to furnish us with
       // a room name via the socket. this will therefore result in a redirect event instead.
+      // TODO - ignore this comment, we will be providing a link once the room is generated.
     }
 
     // given a url of format "http://www.netrunnerdb.com/{lang}/decklist/{deck_id}/{description}",
