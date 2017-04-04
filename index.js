@@ -22,7 +22,7 @@ var rooms = [];
 var Card = function(code, index) {
   // code is the unique specifier for each netrunner card: e.g. 01012 = Parasite
   this.code = code;
-  this.taken = false;
+  this.taken = false; // TODO - make this the client who has taken it
   // our server has a mapping of card IDs to the NRDB data, from which we copy
   // what we need. just the title for now
   this.title = cards[code].title;
@@ -57,6 +57,7 @@ app.set('view engine', 'pug')
 
 // define the static directory from which we serve images
 app.use('/images', express.static(__dirname + '/images'));
+
 app.use('/draft', express.static(__dirname + '/draft'));
 app.use('/angular', express.static(__dirname + '/node_modules/angular'));
 
@@ -130,36 +131,36 @@ io.on('connection', function(socket) {
     socket.join(roomId);
     console.log(id + ' is now in room ' + roomId);
     // make sure to send them an initial update of the current draft
-    socket.emit('draft:refresh', draftStates[room].drafted);
+    socket.emit('draft:refresh', draftStates[roomId].drafted);
   });
 
   // draft handlers
-  socket.on('draft:draw', function(drawData) {
+  socket.on('draft:draw', function(numCards) {
     var newCards = [];
-    var draftState = draftStates[drawData.room];
+    var draftState = draftStates[roomId];
 
     // can only draw as many cards as we have left...
-    var numCards = Math.min(drawData.number, draftState.remaining.length);
+    var numCards = Math.min(numCards, draftState.remaining.length);
     for (var i = 0; i < numCards; i++) {
       let card = draftState.remaining.pop();
       newCards.push(card);
       draftState.drafted.push(card);
     }
     // send the drawn cards to the draft room
-    io.to(drawData.room).emit('draft:cardsdrawn', newCards);
+    io.to(roomId).emit('draft:cardsdrawn', newCards);
   });
 
-  socket.on('draft:reset', function(room) {
+  socket.on('draft:reset', function() {
     // push the drafted cards in a draft state back into the remaining cards,
     // reset the taken states, and reshuffle.
-    let draftState = draftStates[room];
+    let draftState = draftStates[roomId];
     draftState.remaining = draftState.remaining.concat(draftState.drafted);
     for (var card in draftState.remaining) {
       draftState.remaining[card].taken = false;
     }
     draftState.remaining = _.shuffle(draftState.remaining);
     draftState.drafted = [];
-    io.to(room).emit('draft:refresh', []); // we know that drafted is empty now...
+    io.to(roomId).emit('draft:refresh', []); // we know that drafted is empty now...
   });
 
   socket.on('draft:cardtaken', function(index) {
@@ -169,6 +170,8 @@ io.on('connection', function(socket) {
     // draw more cards and then do this (ng-repeat will fill in the missing indices).
     // refactor to use a custom track by, which can be a unique specifier per
     // card in the draft state.
+    let draftState = draftStates[roomId];
+    draftState.drafted[index].taken = !draftState.drafted[index].taken;
     socket.broadcast.to(roomId).emit('draft:cardtaken', index);
   });
 });

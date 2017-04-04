@@ -31,62 +31,70 @@ angular.module('draftApp', [])
   return new socketFactory($rootScope, '/');
 })
 
-.factory('draftCardListFactory', function() {
-  var cards = [{id:"00005"}, {id:"00006"}, {id:"00007"}];
+.service('draftService', ['socket', function(socket) {
+  var service = this; // so that we can access data in the socket handler's functions
+  service.cards = [];
 
-  return {
-    getCards: getCards,
-    addCard: addCard
+  // tell the server that we are joining the room as specified
+  service.init = function(roomId) {
+    socket.emit('lobby:joinroom', roomId);
   }
 
-  function getCards() {
-    return cards;
-  }
-
-  function addCard(card) {
-    cards.push(card);
-  }
-})
-
-// describes the state of the current draft and provides interactivity with it.
-// currently just has an array of Cards, though TODO i am looking at changing this
-// to e.g. add unique IDs so i can use a proper ng-repeat track-by index, among
-// other things.
-.controller('DraftController', ['socket', '$attrs', function DraftListController(socket, $attrs) {
-  var ctrl = this; // so that we can access data in the socket handler's functions
-  ctrl.cards = [];
-
-  // tell the server that we are joining the room as specified by this component
-  socket.emit('lobby:joinroom', $attrs.room);
-
-  ctrl.select = function(card, index) {
+  service.select = function(card, index) {
     // relying on ng-repeat index for now. works, but TODO.
     socket.emit('draft:cardtaken', index);
     card.taken = !card.taken;
   }
 
-  ctrl.draw = function(numCards) {
-    socket.emit('draft:draw', {number: numCards, room: $attrs.room});
+  service.draw = function(numCards) {
+    socket.emit('draft:draw', numCards);
   }
 
-  ctrl.reset = function() {
-    ctrl.cards = [];
-    socket.emit('draft:reset', $attrs.room);
+  service.reset = function() {
+    service.cards = [];
+    socket.emit('draft:reset');
   }
 
   socket.on('draft:cardsdrawn', function(cards) {
-    ctrl.cards = ctrl.cards.concat(cards);
+    service.cards = service.cards.concat(cards);
   })
 
   socket.on('draft:cardtaken', function(index) {
     // toggle the card's taken status
-    ctrl.cards[index].taken = !ctrl.cards[index].taken;
+    service.cards[index].taken = !service.cards[index].taken;
   });
 
   socket.on('draft:refresh', function(cards) {
     // reinitialise the cards data with the given state
-    ctrl.cards = cards;
+    service.cards = cards;
   });
+}])
+
+// interfaces with the draft service to allow interactivity with the cards
+// in the draft state.
+.controller('DraftController', ['draftService', function DraftController(draftService) {
+  var ctrl = this;
+
+  // TODO - can i cleanly bind this so i'm not returning the whole list every time?
+  ctrl.getCards = function() {
+    return draftService.cards;
+  }
+
+  ctrl.select = function(card, index) {
+    draftService.select(card, index);
+  }
+
+  ctrl.draw = function(numCards) {
+    draftService.draw(numCards); // TODO is this too trivial a use of service/controller?
+  }
+
+  ctrl.reset = function() {
+    draftService.reset();
+  }
+
+  ctrl.test = function() {
+    console.log('TESTING - CARDS: ' + ctrl.cards);
+  }
 
 }])
 
@@ -148,15 +156,13 @@ angular.module('draftApp', [])
     </tr>
     <tr>
       <td>
-        <img ng-data="card" ng-repeat="card in $ctrl.cards" ng-click="$ctrl.select(card, $index)" ng-src="/images/{{card.code}}.png"
+        <img ng-data="card" ng-repeat="card in $ctrl.getCards()" ng-click="$ctrl.select(card, $index)" ng-src="/images/{{card.code}}.png"
         class="cardimage" ng-class="{'taken': card.taken==true}" id="{{$index}}" alt="{{card.title}}">
       </td>
     </tr>
   </table>
   `,
   controller: "DraftController",
-  // TODO - let this component share data with a parent controller, so it can be
-  // used by another component (the up-and-coming draft-card-list).
   bindings: {
     card: "="
   }
@@ -166,5 +172,28 @@ angular.module('draftApp', [])
 // (and potentially, what others have selected). room for lots of fancy stuff here;
 // sort by type, exporting features, etc...
 .component('draftCardList', {
+  template:`
+  <ul>
+    <li ng-repeat="card in $ctrl.getCards()"> {{card.title}} </li>
+  </ul>
+  `,
+  controller: "DraftController",
+  bindings: {
+    card: "="
+  }
+})
 
+// i don't _really_ like this, but it's my cleanest attempt so far at initialising
+// the draftService with information from HTML (as passed in from the URL through
+// the view engine, currently as an attribute).
+.directive('draftRoom', function() {
+  return {
+    restrict: "A", // attributes only; this decorates an existing element
+    scope: {
+      draftRoom: "@"
+    },
+    controller: ['draftService', '$scope', function(draftService, $scope) {
+      draftService.init($scope.draftRoom);
+    }]
+  }
 })
