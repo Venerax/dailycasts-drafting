@@ -19,10 +19,10 @@ const nrdbApiPrivate = 'http://www.netrunnerdb.com/api/2.0/private/'; // can't u
 var rooms = [];
 
 // each card object has these properties:
-var Card = function(code, index) {
+var Card = function(code) {
   // code is the unique specifier for each netrunner card: e.g. 01012 = Parasite
   this.code = code;
-  this.taken = false; // TODO - make this the client who has taken it
+  this.owner = null; // the socket ID of the person who drafted this card, null if not taken
   // our server has a mapping of card IDs to the NRDB data, from which we copy
   // what we need. just the title for now
   this.title = cards[code].title;
@@ -33,14 +33,32 @@ var DraftState = function(cardData) {
   this.remaining = [];
   this.drafted = [];
 
+  this.cards = [];
+  this.draftedCards = [];
+
   for (let code in cardData) {
     // add the card this many times:
     for (let i = 0; i < cardData[code]; i++) {
-      this.remaining.push(new Card(code, i));
+      this.remaining.push(new Card(code));
+      this.cards.push({index: i, card: new Card(code)});
     }
   }
   // finally, shuffle the draft list.
   this.remaining = _.shuffle(this.remaining);
+
+  this.draft = function(numCards) {
+    // shuffle the remaining cards beforehand, so clients can't cheat by
+    // inspecting the draft state object
+    this.cards = _.shuffle(this.cards);
+    numCards = Math.min(numCards, this.cards.length);
+    let newCards = [];
+    for (let i = 0; i < numCards; i++) {
+      let card = this.cards.pop();
+      newCards.push(card);
+      this.draftedCards.push(card);
+    }
+    return newCards;
+  }
 }
 
 // TODO some kind of custom utils module
@@ -58,7 +76,7 @@ app.set('view engine', 'pug')
 // define the static directory from which we serve images
 app.use('/images', express.static(__dirname + '/images'));
 
-app.use('/draft', express.static(__dirname + '/draft'));
+app.use('/js', express.static(__dirname + '/js'));
 app.use('/angular', express.static(__dirname + '/node_modules/angular'));
 
 // set up favicon
@@ -89,6 +107,9 @@ io.on('connection', function(socket) {
 
   var id = socket.id;
   var roomId = '/'; // the room that the client is currently in
+
+  // tell the client what its ID is, so it can take cards client side
+  socket.emit('client:setid', id);
 
   console.log('USER CONNECTED: ' + id);
 
@@ -156,7 +177,7 @@ io.on('connection', function(socket) {
     let draftState = draftStates[roomId];
     draftState.remaining = draftState.remaining.concat(draftState.drafted);
     for (var card in draftState.remaining) {
-      draftState.remaining[card].taken = false;
+      draftState.remaining[card].owner = null;
     }
     draftState.remaining = _.shuffle(draftState.remaining);
     draftState.drafted = [];
@@ -171,8 +192,8 @@ io.on('connection', function(socket) {
     // refactor to use a custom track by, which can be a unique specifier per
     // card in the draft state.
     let draftState = draftStates[roomId];
-    draftState.drafted[index].taken = !draftState.drafted[index].taken;
-    socket.broadcast.to(roomId).emit('draft:cardtaken', index);
+    draftState.drafted[index].owner = id;
+    socket.broadcast.to(roomId).emit('draft:cardtaken', {index: index, owner: id});
   });
 });
 

@@ -1,39 +1,10 @@
-// TODO put this somewhere nicer
-function socketFactory($rootScope, namespace) {
-  var socket = io(namespace);
-
-  return {
-    on: function(eventName, callback) {
-      socket.on(eventName, function() {
-        var args = arguments;
-        $rootScope.$apply(function() {
-          callback.apply(socket, args);
-        });
-      });
-    },
-    emit: function(eventName, data, callback) {
-      socket.emit(eventName, data, function() {
-        var args = arguments;
-        $rootScope.$apply(function () {
-          if (callback) {
-            callback.apply(socket, args);
-          }
-        });
-      });
-    }
-  }
-}
-
-angular.module('draftApp', [])
-
-.factory('socket', function ($rootScope) {
-  // default namespace is '/', which talks to everyone.
-  return new socketFactory($rootScope, '/');
-})
+angular.module('draftApp', ['socketio'])
 
 .service('draftService', ['socket', function(socket) {
   var service = this; // so that we can access data in the socket handler's functions
   service.cards = [];
+
+  service.clientId = '';
 
   // tell the server that we are joining the room as specified
   service.init = function(roomId) {
@@ -43,7 +14,7 @@ angular.module('draftApp', [])
   service.select = function(card, index) {
     // relying on ng-repeat index for now. works, but TODO.
     socket.emit('draft:cardtaken', index);
-    card.taken = !card.taken;
+    card.owner = service.clientId;
   }
 
   service.draw = function(numCards) {
@@ -55,13 +26,17 @@ angular.module('draftApp', [])
     socket.emit('draft:reset');
   }
 
+  socket.on('client:setid', function(id) {
+    service.clientId = id;
+  })
+
   socket.on('draft:cardsdrawn', function(cards) {
     service.cards = service.cards.concat(cards);
   })
 
-  socket.on('draft:cardtaken', function(index) {
+  socket.on('draft:cardtaken', function(takenData) {
     // toggle the card's taken status
-    service.cards[index].taken = !service.cards[index].taken;
+    service.cards[takenData.index].owner = takenData.owner;
   });
 
   socket.on('draft:refresh', function(cards) {
@@ -92,49 +67,10 @@ angular.module('draftApp', [])
     draftService.reset();
   }
 
-  ctrl.test = function() {
-    console.log('TESTING - CARDS: ' + ctrl.cards);
+  ctrl.owner = function() {
+    return draftService.clientId;
   }
 
-}])
-
-// TODO this should be in a separate module
-.controller('LobbiesController', ['socket', '$window', function LobbiesController(socket, $window) {
-    var ctrl = this;
-    ctrl.rooms = [];
-
-    // ask for an initial update of the current rooms available
-    socket.emit('lobby:refresh');
-
-    ctrl.createDraft = function() {
-      socket.emit('lobby:createroom', {decklistID: stripDecklistID(ctrl.decklistUrl), cardsPerDeal: ctrl.cardsPerDeal});
-      // it would be nice to redirect here, but we we need to wait on the server to furnish us with
-      // a room name via the socket. this will therefore result in a redirect event instead.
-      // TODO - ignore this comment, we will be providing a link once the room is generated.
-    }
-
-    // given a url of format "http://www.netrunnerdb.com/{lang}/decklist/{deck_id}/{description}",
-    // extract the deck id so we can pass it to the server.
-    // i haven't been able to find a RESTful way of requesting the API version from each page, nor do i want
-    // to force a user to grab the API page themselves... so, regex it is.
-    function stripDecklistID(url) {
-      // this is yucky, but it works for now. grabs the group of digits after the decklist/ path.
-      return url.match(/decklist\/([0-9]*)/)[1];
-    }
-
-    socket.on('lobby:refresh', function(rooms) {
-      ctrl.rooms = rooms;
-    });
-
-    socket.on('lobby:roomcreated', function(roomId) {
-      ctrl.rooms.push(roomId);
-    });
-
-    // TODO - get rid of this and the $window dependency and just create a link
-    // to a newly created room instead
-    socket.on('redirect', function(url) {
-      $window.location.href = url;
-    });
 }])
 
 // describes an interface allowing the user to interact with the ongoing draft
@@ -157,7 +93,7 @@ angular.module('draftApp', [])
     <tr>
       <td>
         <img ng-data="card" ng-repeat="card in $ctrl.getCards()" ng-click="$ctrl.select(card, $index)" ng-src="/images/{{card.code}}.png"
-        class="cardimage" ng-class="{'taken': card.taken==true}" id="{{$index}}" alt="{{card.title}}">
+        class="cardimage" ng-class="{'taken': card.owner}" id="{{$index}}" alt="{{card.title}}">
       </td>
     </tr>
   </table>
@@ -174,7 +110,7 @@ angular.module('draftApp', [])
 .component('draftCardList', {
   template:`
   <ul>
-    <li ng-repeat="card in $ctrl.getCards()"> {{card.title}} </li>
+    <li ng-repeat="card in $ctrl.getCards() | filter: {owner: $ctrl.owner()}"> {{card.title}} </li>
   </ul>
   `,
   controller: "DraftController",

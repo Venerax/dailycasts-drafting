@@ -1,5 +1,5 @@
 doctype html
-html(ng-app="draftApp")
+html(ng-app="lobbyApp")
   head
     title Daily Casts Drafting
     link(rel="icon" href="images/favicon.ico?v=1")
@@ -28,4 +28,5 @@ html(ng-app="draftApp")
             a(href="room/{{room}}") {{room}}
     script(src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js")
     script(type="text/javascript" src="/socket.io/socket.io.js")
-    script(type="text/javascript" src="/draft/draft.js")
+    script(type="text/javascript" src="/js/socketio.js")
+    script(type="text/javascript" src="/js/lobby.js")
